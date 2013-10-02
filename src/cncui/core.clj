@@ -10,6 +10,21 @@
 (defn tty-devices []
   (filter #(.startsWith (.getName %) "tty.") (file-seq (io/file "/dev"))))
 
+(defn config-ui-axis
+  [id label]
+  [ id label
+    {:id :mode :label "Mode" :type :number :range (range 1 8) :default 8}
+    {:id :pitch :label "Pitch" :type :number :default 8}])
+
+(def config-ui
+  [{:id :dev :label "Device" :type :path :model tty-devices}
+    [:limits "Limits"
+      {:id :freq :label "Frequency" :type :number :range (range 0 1000000)}]
+    [:driver "Driver"
+      (config-ui-axis :x-axis "X-Axes")
+      (config-ui-axis :y-axis "Y-Axes")
+      (config-ui-axis :z-axis "Z-Axes")]])
+
 (declare widget-from-map)
 
 (defn component-for
