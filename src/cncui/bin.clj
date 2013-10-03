@@ -2,7 +2,6 @@
   (:use [clojure.java.io])
   (:import [java.nio ByteBuffer]))
 
-
 (defn pack-byte [buf v]
   (.put buf (unchecked-byte (bit-and 0xff v)))
   buf)
@@ -33,7 +32,6 @@
 (defn make-str-from-bytes [ba]
   (let [nba (into-array Byte/TYPE (map unchecked-byte (filter pos? (seq ba))))]
     (String. nba 0 (alength nba))))
-
 
 (defn unpack-str [buf w]
   (let [bb (byte-array w)]
