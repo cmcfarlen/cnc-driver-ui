@@ -1,6 +1,8 @@
 (ns cncui.bin
   (:use [clojure.java.io])
-  (:import [java.nio ByteBuffer]))
+  (:import [java.io FileInputStream]
+           [java.nio ByteBuffer ByteOrder]
+           [java.nio.channels FileChannel FileChannel$MapMode]))
 
 (defn unsigned-byte [v]
   (let [vv (unchecked-byte v)] (if (< vv 0) (+ 256 vv) vv)))
@@ -21,7 +23,7 @@
 (defn pack-int [buf v]
   (.putInt buf (unchecked-int (bit-and 0xffffffff v))))
 
-(defn pack-string [buf s w]
+(defn pack-string [w buf s]
   (let [l (.length s)]
     (if (< l w)
       (-> buf
@@ -63,7 +65,6 @@
 
 (defn accum-size
   [total cnt esize e]
-  (println [total cnt esize e])
   (+ total (* cnt esize)))
 
 (defn char->unpacker
@@ -80,7 +81,6 @@
 (defn char->packer
   [e]
   (do
-    (println "char->packer" e)
     (case e
       (\b \B) pack-byte
       (\h \H) pack-short
@@ -94,27 +94,16 @@
     (\h \H) 2
     (\i \I) 4))
 
-(defn accum-unpack
-  [unpackers cnt esize e]
+(defn accum-marshal
+  [mapper marshallers cnt esize e]
   (if (nil? e)
-    unpackers
-    (let [unpacker (char->unpacker e)]
+    marshallers
+    (let [marshaller (mapper e)]
       (if (= e \s)
-        (conj unpackers (partial unpacker cnt))
+        (conj marshallers (partial marshaller cnt))
         (if (= 1 cnt)
-          (conj unpackers unpacker)
-          (concat unpackers (repeat cnt unpacker)))))))
-
-(defn accum-pack
-  [packers cnt esize e]
-  (if (nil? e)
-    packers
-    (let [packer (char->packer e)]
-      (if (= e \s)
-        (conj packers (partial packer cnt))
-        (if (= 1 cnt)
-          (conj packers packer)
-          (concat packers (repeat cnt packer)))))))
+          (conj marshallers marshaller)
+          (concat marshallers (repeat cnt marshaller)))))))
 
 (defn dig
   [d]
@@ -142,10 +131,73 @@
 
 (defn struct-unpacker
   [s]
-  (struct-reduce accum-unpack [] s))
+  (let [sz (struct-size s)
+        unpackers (struct-reduce (partial accum-marshal char->unpacker) [] s)]
+    (fn [buf]
+      (map (fn [f] (f buf)) unpackers))))
 
 (defn struct-packer
   [s]
-  (struct-reduce accum-pack [] s))
+  (let [sz (struct-size s)
+        packers (struct-reduce (partial accum-marshal char->packer) [] s)]
+    (fn [data]
+      (let [buf (ByteBuffer/allocate sz)]
+        (.flip (reduce (fn [b [f e]] (f b e)) buf (partition 2 (interleave packers data))))))))
+
+(defprotocol BinaryRecord
+  (binsize [r])
+  (pack [r])
+  (unpack [r buf])
+  (signature [r]))
+
+(defmacro defbinrecord
+  [name signature fields]
+  `(defrecord ~name ~fields
+     BinaryRecord
+     (binsize [_] (struct-size ~signature))
+     (pack [_] ((struct-packer ~signature) ~fields))
+     (unpack [r# buf#]
+       (let [d# ((struct-unpacker ~signature) buf#)
+             kw# (interleave (keys r#) d#)]
+         (apply (partial assoc r#) kw#)))
+     (signature [_] ~signature)))
+
+(defn record-seq
+  [rec buf]
+  (if (.hasRemaining buf)
+    (cons (unpack rec buf) (record-seq rec buf))
+    []))
+
+(defn map-file
+  [file]
+  (let [is (FileInputStream. file)
+        ch (.getChannel is)]
+    (.order (.map ch FileChannel$MapMode/READ_ONLY 0 (.size ch)) ByteOrder/LITTLE_ENDIAN)))
+
+
+(defn read-records
+  [file rec]
+    (record-seq rec (map-file file)))
+
+
+(defbinrecord TestPacket "hhibhs5" [magic length test-int test-byte test-short test-str])
+(def s (read-records "out.dat" (->TestPacket 1 1 1 1 1 "")))
+
+;(defbinrecord Testr "bbbb" [a b c d])
+;(def t (->Testr 1 1 1 1))
+;(def b (pack (->Testr 4 3 2 1)))
+;(println (unpack t b))
+
+;; (defn defbinrecord
+;;   [name spec & fields]
+;;   (let [sz (struct-size spec)
+;;         packer (struct-packer spec)
+;;         unpacker (struct-unpacker spec)]
+;;     (defrecord name fields
+;;       BinaryRecord
+;;       (size [_] sz)
+;;       (pack [r d] (packer r))
+;;       (unpack [r b] (unpacker b)
+
 
 
