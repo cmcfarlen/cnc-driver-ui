@@ -1,5 +1,7 @@
 (ns cncui.bin-test
-  (:import [java.nio ByteBuffer])
+  (:import [java.nio ByteBuffer]
+           [java.io File])
+  (:require [clojure.java.io :as io])
   (:use clojure.test
         cncui.bin))
 
@@ -74,5 +76,66 @@
                             (pack-string! 32 v)
                             (.flip)
                             (unpack-string! 32))) s))))))
+
+(defbinrecord TestRecord "bhiBHIs10" [ sb ss si ub us ui s ])
+
+(deftest binrecords
+  (testing "binrecord identity"
+    (let [tr (->TestRecord 100 10000 1000000 250 50000 3000000000 "1234567890")
+          bb (byte-buffer (binsize tr))]
+      (is (= (:sb tr) 100))
+      (is (= (:ss tr) 10000))
+      (is (= (:si tr) 1000000))
+      (is (= (:ub tr) 250))
+      (is (= (:us tr) 50000))
+      (is (= (:ui tr) 3000000000))
+      (is (= (:s tr) "1234567890"))
+      (pack tr bb)
+      (is (= (.position bb) (binsize tr)))
+      (flip bb)
+      (let [unpacked-tr (unpack tr bb)]
+        (is (= (:sb unpacked-tr) 100))
+        (is (= (:ss unpacked-tr) 10000))
+        (is (= (:si unpacked-tr) 1000000))
+        (is (= (:ub unpacked-tr) 250))
+        (is (= (:us unpacked-tr) 50000))
+        (is (= (:ui unpacked-tr) 3000000000))
+        (is (= (:s  unpacked-tr) "1234567890")))
+      )))
+
+(defn make-binfile
+  []
+  (let [tmpf (File/createTempFile "test" "bin")
+        bb   (byte-buffer 32)]
+    (->> bb
+        (pack-int! 1)
+        (pack-int! 2)
+        (pack-int! 3)
+        (pack-int! 4)
+        (pack-int! 5)
+        (pack-int! 6)
+        (pack-int! 7)
+        (pack-int! 8)
+        (flip))
+    (with-open [ostr (io/output-stream tmpf)]
+      (doall (take 10 (repeatedly (fn [] (.write ostr (.array bb)))))))
+    tmpf))
+
+(defbinrecord TestRecord2 "iiiiiiii" [o t th f fi s se e])
+
+(deftest binfile
+  (testing "making a binary file"
+    (let [binf (make-binfile)]
+      (is (.exists binf))
+      (is (= (.length binf) 320))))
+  (testing "reading records from binary file"
+    (let [binf (make-binfile)
+          trec (->TestRecord2 0 0 0 0 0 0 0 0)
+          bb (map-file binf)
+          records (take 10 (repeatedly (fn [] (unpack trec bb))))]
+      (printf (.getAbsolutePath binf))
+      (is (= (count records) 10))
+      (map (fn [e] (is (= (:o e) 1))) records))))
+
 
 

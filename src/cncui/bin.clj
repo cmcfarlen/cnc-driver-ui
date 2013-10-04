@@ -201,6 +201,11 @@
          (apply (partial assoc r#) kw#)))
      (signature [_] ~signature)))
 
+(defn byte-buffer
+  "utility to allocate a byte buffer"
+  [sz]
+  (ByteBuffer/allocate sz))
+
 (defn record-seq
   [rec buf]
   (if (remaining? buf)
