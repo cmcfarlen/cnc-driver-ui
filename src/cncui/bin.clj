@@ -6,6 +6,7 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println '~x "=" x#) x#))
 
+;; unsigned interpretation of signed data
 (defn unsigned-byte
   "interprets a byte as unsigned and returns as an int"
   [v]
@@ -49,6 +50,76 @@
   (get-short [buf] (.getShort buf))
   (get-int [buf] (.getInt buf))
   (get-long [buf] (.getLong buf)))
+
+
+(defrecord BinIOStream [in out]
+  BinStream
+  (remaining? [buf] (> 0 (.available in)))
+  (flip [buf] buf)
+  (put-byte [buf v] (.write out (unchecked-byte v)) buf)
+  (put-byte [buf v ofs cnt] (.write out v ofs cnt) buf)
+  (put-short [buf v] 
+    (let [cv (unchecked-short v)]
+      (put-byte buf cv)
+      (put-byte buf (bit-shift-right cv 8))
+      buf))
+  (put-int [buf v]
+    (let [cv (unchecked-int v)]
+      (put-byte buf cv)
+      (put-byte buf (bit-shift-right cv 8))
+      (put-byte buf (bit-shift-right cv 16))
+      (put-byte buf (bit-shift-right cv 24))
+      buf))
+  (put-long [buf v]
+    (let [cv (unchecked-int v)]
+      (put-byte buf cv)
+      (put-byte buf (bit-shift-right cv 8))
+      (put-byte buf (bit-shift-right cv 16))
+      (put-byte buf (bit-shift-right cv 24))
+      (put-byte buf (bit-shift-right cv 32))
+      (put-byte buf (bit-shift-right cv 40))
+      (put-byte buf (bit-shift-right cv 48))
+      (put-byte buf (bit-shift-right cv 56))
+      buf))
+  (get-byte [buf] (unchecked-byte (.read in)) buf)
+  (get-byte [buf ba ofs cnt] (.read in ba ofs cnt) buf)
+  (get-short [buf] 
+    (let [b1 (.read in)
+          b2 (.read in)]
+      (unchecked-short
+        (bit-or
+          (bit-shift-left b2 8)
+          b1))))
+  (get-int [buf]
+    (let [b1 (.read in)
+          b2 (.read in)
+          b3 (.read in)
+          b4 (.read in)]
+      (unchecked-short
+        (bit-or
+          (bit-shift-left b4 24)
+          (bit-shift-left b3 16)
+          (bit-shift-left b2 8)
+          b1))))
+  (get-long [buf]
+    (let [b1 (.read in)
+          b2 (.read in)
+          b3 (.read in)
+          b4 (.read in)
+          b5 (.read in)
+          b6 (.read in)
+          b7 (.read in)
+          b8 (.read in)]
+      (unchecked-short
+        (bit-or
+          (bit-shift-left b8 56)
+          (bit-shift-left b7 48)
+          (bit-shift-left b6 40)
+          (bit-shift-left b5 32)
+          (bit-shift-left b4 24)
+          (bit-shift-left b3 16)
+          (bit-shift-left b2 8)
+          b1)))))
 
 
 (defn pack-byte! [v buf]
