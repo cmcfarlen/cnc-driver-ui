@@ -164,6 +164,23 @@
             (bit-shift-left b7 8)
             b8))))))
 
+(defn input-bin-stream
+  "make an input bin stream"
+  ([in]
+   (input-bin-stream in :little))
+  ([in order]
+   (let [ins (io/input-stream in)]
+     (->BinIOStream ins nil order))))
+
+(defn output-bin-stream
+  "make an output bin stream"
+  ([out]
+   (output-bin-stream out :little))
+  ([out order]
+   (let [outs (io/output-stream out)]
+     (->BinIOStream nil outs order))))
+
+
 
 (defn pack-byte! [v buf]
   (put-byte buf (unchecked-byte (bit-and 0xff v)))
@@ -178,11 +195,12 @@
   buf)
 
 (defn pack-string! [w s buf]
-  (let [l (.length s)]
+  (let [l (.length s)
+        ba (.getBytes s)]
     (if (< l w)
       (-> buf
-          (put-byte (.getBytes s))
-          (put-byte (byte-array (- w l))))
+          (put-byte ba 0 l)
+          (put-byte (byte-array (- w l)) 0 (- w l)))
       (put-byte buf (.getBytes s) 0 w))
     buf))
 
@@ -315,6 +333,12 @@
          (apply (partial assoc r#) kw#)))
      (signature [_] ~signature)))
 
+(defn empty-record
+  "create an instance of binrecord with all null fields"
+  [record-type]
+  (let [ctr (resolve (symbol (str "/map->" (.getSimpleName record-type))))]
+    (ctr {})))
+
 (defn byte-buffer
   "utility to allocate a byte buffer"
   [sz]
@@ -335,6 +359,33 @@
 (defn read-records
   [file rec]
     (record-seq rec (map-file file)))
+
+(defn byte-seq
+  [buf]
+  (lazy-seq (cons (get-byte buf) (byte-seq buf))))
+
+(def bb (->BinIOStream nil (output-stream "out.bin") :little))
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(pack-byte! 0x42 bb)
+(defbinrecord TestMsg "hhhis16" [magic sz tp cnt msg])
+(def tm (->TestMsg 0x1eaf 26 0x10 0x42 "booo"))
+(reduce (fn [b t] (pack t b)) bb (map #(assoc tm :cnt %1) (range 0 10)))
+(pack tm bb)
+(.close (:out bb))
+
+
+(defn -main
+  "I don't do a whole lot."
+  [& args]
+  (println "hey!"))
 
 
 ;(defbinrecord TestPacket "hhibhs5" [magic length test-int test-byte test-short test-str])

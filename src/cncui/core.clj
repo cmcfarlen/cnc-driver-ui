@@ -111,7 +111,5 @@
 (defn -main
   "I don't do a whole lot."
   [& args]
-  (let [cfg @config]
-    (pr cfg)
-    (ss/native!)
-    (config-dialog cfg)))
+  (println "hey!"))
+
