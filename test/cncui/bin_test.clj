@@ -77,6 +77,57 @@
                             (.flip)
                             (unpack-string! 32))) s))))))
 
+
+(defn make-binfile
+  []
+  (let [tmpf (File/createTempFile "test" "bin")
+        bb   (byte-buffer 32)]
+    (->> bb
+        (pack-int! 1)
+        (pack-int! 2)
+        (pack-int! 3)
+        (pack-int! 4)
+        (pack-int! 5)
+        (pack-int! 6)
+        (pack-int! 7)
+        (pack-int! 8)
+        (flip))
+    (with-open [ostr (io/output-stream tmpf)]
+      (doall (take 10 (repeatedly (fn [] (.write ostr (.array bb)))))))
+    tmpf))
+
+(defn make-tmpout
+  []
+  (let [tmpf (File/createTempFile "testout" "bin")]
+    (io/output-stream tmpf)))
+
+
+
+(deftest biniostream
+  (testing "bininput biniostrem"
+    (let [bf (make-binfile)]
+      (with-open [in (io/input-stream bf)]
+        (let [bs (->BinIOStream in nil :big)
+              istr (take 8 (repeatedly (fn [] (unpack-int! bs))))
+              exp [1 2 3 4 5 6 7 8]]
+          (is (= istr exp))))))
+  (testing "binoutput biniostream"
+    (let [tmpf (File/createTempFile "testout" "bin")
+          os (io/output-stream tmpf)
+          bs (->BinIOStream nil os :big)]
+      (-> bs
+          (put-int 1)
+          (put-short 2)
+          (put-byte 3)
+          (:out)
+          (.close))
+      (is (= (.length tmpf) 7))
+      (let [ins (io/input-stream tmpf)
+            bs (assoc bs :in ins)
+            d  [(get-int bs) (get-short bs) (get-byte bs)]
+            e  [1 2 3]]
+        (is (= d e))))))
+
 (defbinrecord TestRecord "bhiBHIs10" [ sb ss si ub us ui s ])
 
 (deftest binrecords
@@ -102,24 +153,6 @@
         (is (= (:ui unpacked-tr) 3000000000))
         (is (= (:s  unpacked-tr) "1234567890")))
       )))
-
-(defn make-binfile
-  []
-  (let [tmpf (File/createTempFile "test" "bin")
-        bb   (byte-buffer 32)]
-    (->> bb
-        (pack-int! 1)
-        (pack-int! 2)
-        (pack-int! 3)
-        (pack-int! 4)
-        (pack-int! 5)
-        (pack-int! 6)
-        (pack-int! 7)
-        (pack-int! 8)
-        (flip))
-    (with-open [ostr (io/output-stream tmpf)]
-      (doall (take 10 (repeatedly (fn [] (.write ostr (.array bb)))))))
-    tmpf))
 
 (defbinrecord TestRecord2 "iiiiiiii" [o t th f fi s se e])
 

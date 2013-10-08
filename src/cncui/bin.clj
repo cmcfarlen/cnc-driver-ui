@@ -52,55 +52,88 @@
   (get-long [buf] (.getLong buf)))
 
 
-(defrecord BinIOStream [in out]
+(defrecord BinIOStream [in out order]
   BinStream
   (remaining? [buf] (> 0 (.available in)))
   (flip [buf] buf)
-  (put-byte [buf v] (.write out (unchecked-byte v)) buf)
+  (put-byte [buf v] (.write out (unchecked-int v)) buf)
   (put-byte [buf v ofs cnt] (.write out v ofs cnt) buf)
   (put-short [buf v] 
     (let [cv (unchecked-short v)]
-      (put-byte buf cv)
-      (put-byte buf (bit-shift-right cv 8))
+      (if (= order :little)
+        (do
+          (put-byte buf cv)
+          (put-byte buf (bit-shift-right cv 8)))
+        (do
+          (put-byte buf (bit-shift-right cv 8))
+          (put-byte buf cv)))
       buf))
   (put-int [buf v]
     (let [cv (unchecked-int v)]
-      (put-byte buf cv)
-      (put-byte buf (bit-shift-right cv 8))
-      (put-byte buf (bit-shift-right cv 16))
-      (put-byte buf (bit-shift-right cv 24))
+      (if (= order :little)
+        (do
+          (put-byte buf cv)
+          (put-byte buf (bit-shift-right cv 8))
+          (put-byte buf (bit-shift-right cv 16))
+          (put-byte buf (bit-shift-right cv 24)))
+        (do
+          (put-byte buf (bit-shift-right cv 24))
+          (put-byte buf (bit-shift-right cv 16))
+          (put-byte buf (bit-shift-right cv 8))
+          (put-byte buf cv)))
       buf))
   (put-long [buf v]
     (let [cv (unchecked-int v)]
-      (put-byte buf cv)
-      (put-byte buf (bit-shift-right cv 8))
-      (put-byte buf (bit-shift-right cv 16))
-      (put-byte buf (bit-shift-right cv 24))
-      (put-byte buf (bit-shift-right cv 32))
-      (put-byte buf (bit-shift-right cv 40))
-      (put-byte buf (bit-shift-right cv 48))
-      (put-byte buf (bit-shift-right cv 56))
+      (if (= order :little)
+        (do
+          (put-byte buf cv)
+          (put-byte buf (bit-shift-right cv 8))
+          (put-byte buf (bit-shift-right cv 16))
+          (put-byte buf (bit-shift-right cv 24))
+          (put-byte buf (bit-shift-right cv 32))
+          (put-byte buf (bit-shift-right cv 40))
+          (put-byte buf (bit-shift-right cv 48))
+          (put-byte buf (bit-shift-right cv 56)))
+        (do
+          (put-byte buf (bit-shift-right cv 56))
+          (put-byte buf (bit-shift-right cv 48))
+          (put-byte buf (bit-shift-right cv 40))
+          (put-byte buf (bit-shift-right cv 32))
+          (put-byte buf (bit-shift-right cv 24))
+          (put-byte buf (bit-shift-right cv 16))
+          (put-byte buf (bit-shift-right cv 8))
+          (put-byte buf cv)))
       buf))
-  (get-byte [buf] (unchecked-byte (.read in)) buf)
-  (get-byte [buf ba ofs cnt] (.read in ba ofs cnt) buf)
+  (get-byte [buf] (unchecked-byte (.read in)))
+  (get-byte [buf ba ofs cnt] (.read in ba ofs cnt))
   (get-short [buf] 
     (let [b1 (.read in)
           b2 (.read in)]
       (unchecked-short
-        (bit-or
-          (bit-shift-left b2 8)
-          b1))))
+        (if (= order :little)
+          (bit-or
+            (bit-shift-left b2 8)
+            b1)
+          (bit-or
+            (bit-shift-left b1 8)
+            b2)))))
   (get-int [buf]
     (let [b1 (.read in)
           b2 (.read in)
           b3 (.read in)
           b4 (.read in)]
-      (unchecked-short
-        (bit-or
-          (bit-shift-left b4 24)
-          (bit-shift-left b3 16)
-          (bit-shift-left b2 8)
-          b1))))
+      (unchecked-int
+        (if (= order :little)
+          (bit-or
+            (bit-shift-left b4 24)
+            (bit-shift-left b3 16)
+            (bit-shift-left b2 8)
+            b1)
+          (bit-or
+            (bit-shift-left b1 24)
+            (bit-shift-left b2 16)
+            (bit-shift-left b3 8)
+            b4)))))
   (get-long [buf]
     (let [b1 (.read in)
           b2 (.read in)
@@ -110,16 +143,26 @@
           b6 (.read in)
           b7 (.read in)
           b8 (.read in)]
-      (unchecked-short
-        (bit-or
-          (bit-shift-left b8 56)
-          (bit-shift-left b7 48)
-          (bit-shift-left b6 40)
-          (bit-shift-left b5 32)
-          (bit-shift-left b4 24)
-          (bit-shift-left b3 16)
-          (bit-shift-left b2 8)
-          b1)))))
+      (unchecked-long
+        (if (= order :little)
+          (bit-or
+            (bit-shift-left b8 56)
+            (bit-shift-left b7 48)
+            (bit-shift-left b6 40)
+            (bit-shift-left b5 32)
+            (bit-shift-left b4 24)
+            (bit-shift-left b3 16)
+            (bit-shift-left b2 8)
+            b1)
+          (bit-or
+            (bit-shift-left b1 56)
+            (bit-shift-left b2 48)
+            (bit-shift-left b3 40)
+            (bit-shift-left b4 32)
+            (bit-shift-left b5 24)
+            (bit-shift-left b6 16)
+            (bit-shift-left b7 8)
+            b8))))))
 
 
 (defn pack-byte! [v buf]
