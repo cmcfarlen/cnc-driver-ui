@@ -1,11 +1,21 @@
 (ns cncui.message
   (:require [cncui.bin :as bin]
-            [cncui.port :as port])
+            [cncui.port :as port]
+            [cncui.core :as core])
   (:import [java.nio ByteBuffer ByteOrder]))
 
 (defmacro dbg[x] `(let [x# ~x] (println '~x "=" x#) x#))
 
-(def message-agent (agent {:typemap {} :idmap {}}))
+(defrecord MessageService [reg-agent binstream]
+  core/Service
+  (start [svc]
+    (core/notify "starting message service" svc))
+  (stop [svc]
+    (core/notify "stopping message service" svc)))
+
+(defn register-agent
+  []
+  (agent {:typemap {} :idmap {}}))
 
 (defn register-type
   [a r-type r-id]
@@ -14,11 +24,11 @@
     (assoc-in [:idmap r-id] r-type)))
 
 (defn id->type
-  [r-id]
+  [message-agent r-id]
   (-> @message-agent :idmap (get r-id)))
 
 (defn type->id
-  [r-type]
+  [message-agent r-type]
   (-> @message-agent :typemap (get r-type)))
 
 ;; There has to be a cleaner way for this
@@ -32,65 +42,54 @@
         ctr (resolve (symbol (str nspace "/map->" sname)))]
     (ctr {})))
 
-(defmacro defmessage
-  [name type-id signature fields]
-  `(do
-     (bin/defbinrecord ~name ~signature ~fields)
-     (send message-agent register-type ~name ~type-id)))
+(defn message-service
+  [binstream]
+  (->MessageService (register-agent) binstream))
 
-; message definitions
-(defmessage PingMessage 0x00 "b" [status])
-(defmessage ErrorMessage 0x01 "s" [status])
-(defmessage InfoMessage 0x02 "s" [status])
-(defmessage TestMessage 0x10 "is16" [counter message])
+(defn register-message
+  [svc msg-type type-id]
+  (send (:reg-agent svc) register-type msg-type type-id))
 
-
-; high level protocol
-(defprotocol Mill
-  (stop! [m])
-  (move! [m [xdir xvel xacc xdist] [ydir yvel yacc ydist] [zdir zvel zacc zdist]])
-  (move-x! [m [xdir xvel xacc xdist]])
-  (move-y! [m [ydir yvel yacc ydist]])
-  (move-z! [m [zdir zvel zacc zdist]]))
-
-
-; message look like 0x1eaf <short size> <short type> <field...>
-
+; message look like 0x1eaf <short size> <short type> <correlation> <field...>
 (defn write-message
-  [bstream msg]
-  (let [sz (+ 6 (bin/binsize msg))
-        id (type->id (type msg))]
+  [svc msg]
+  (let [bstream (:binstream svc)
+        sz (+ 8 (bin/binsize msg))
+        id (type->id (:reg-agent svc) (type msg))]
     (-> bstream
-        (bin/pack-short! 0x1eaf)
-        (bin/pack-short! sz)
-        (bin/pack-short! id)
-        (bin/pack msg))))
+        (bin/put-short 0x1eaf)
+        (bin/put-short sz)
+        (bin/put-short id)
+        (bin/put-short 0))
+    (bin/pack msg bstream)))
 
 (defn seek-byte
   [bstream v]
-  (loop [b (bin/unpack-unsigned-byte! bstream)]
+  (loop [b (bin/get-unsigned-byte bstream)]
     (if (= b v)
       v
-      (recur (bin/unpack-unsigned-byte! bstream)))))
+      (recur (bin/get-unsigned-byte bstream)))))
 
 (defn read-magic
   [bstream]
   (loop [m1 (seek-byte bstream 0xaf)
-         m2 (bin/unpack-unsigned-byte! bstream)]
+         m2 (bin/get-unsigned-byte bstream)]
     (if (= m2 0x1e)
       0x1eaf
-      (recur (seek-byte bstream 0xaf) (bin/unpack-unsigned-byte! bstream)))))
+      (recur (seek-byte bstream 0xaf) (bin/get-unsigned-byte bstream)))))
 
 (defn read-message
-  [bstream]
-  (let [magic (read-magic bstream)
-        sz    (bin/unpack-short! bstream)
-        tp    (bin/unpack-short! bstream)
-        mtype (id->type tp)]
+  [svc]
+  (let [bstream (:binstream svc)
+        magic (read-magic bstream)
+        sz    (bin/get-short bstream)
+        tp    (bin/get-short bstream)
+        corr  (bin/get-short bstream)
+        mtype (id->type (:reg-agent svc) tp)]
     (bin/unpack (empty-record mtype) bstream)))
 
 (defn message-seq
-  [bstream]
-  (lazy-seq (cons (read-message bstream) (message-seq bstream))))
+  [svc]
+  (lazy-seq (cons (read-message svc) (message-seq svc))))
 
 

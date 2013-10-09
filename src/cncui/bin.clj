@@ -1,6 +1,6 @@
 (ns cncui.bin
-  (:use [clojure.java.io])
-  (:import [java.io FileInputStream]
+  (:require [clojure.java.io :as io])
+  (:import [java.io FileInputStream Closeable]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel FileChannel$MapMode]))
 
@@ -25,6 +25,7 @@
   "Protocol with an interface like bytebuffer for writing binary data to a stream
    io devices extending this protocol should be able to pack straight from the device"
   (remaining? [s])
+  (end? [s])
   (flip [s])
   (put-byte [s v] [s v ofs cnt] "could be a byte or byte[]")
   (put-short [s v])
@@ -40,11 +41,11 @@
   ByteBuffer
   (remaining? [buf] (.hasRemaining buf))
   (flip [buf] (.flip buf))
-  (put-byte ([buf v] (.put buf v))
+  (put-byte ([buf v] (.put buf (unchecked-byte v)))
             ([buf v ofs cnt] (.put buf v ofs cnt)))
-  (put-short [buf v] (.putShort buf v))
-  (put-int [buf v] (.putInt buf v))
-  (put-long [buf v] (.putLong buf v))
+  (put-short [buf v] (.putShort buf (unchecked-short v)))
+  (put-int [buf v] (.putInt buf (unchecked-int v)))
+  (put-long [buf v] (.putLong buf (unchecked-long v)))
   (get-byte ([buf] (.get buf))
             ([buf ba ofs cnt] (.get buf ba ofs cnt)))
   (get-short [buf] (.getShort buf))
@@ -83,7 +84,7 @@
           (put-byte buf cv)))
       buf))
   (put-long [buf v]
-    (let [cv (unchecked-int v)]
+    (let [cv (unchecked-long v)]
       (if (= order :little)
         (do
           (put-byte buf cv)
@@ -180,21 +181,19 @@
    (let [outs (io/output-stream out)]
      (->BinIOStream nil outs order))))
 
+(defn get-unsigned-byte
+  [buf]
+  (unsigned-byte (get-byte buf)))
 
+(defn get-unsigned-short
+  [buf]
+  (unsigned-short (get-short buf)))
 
-(defn pack-byte! [v buf]
-  (put-byte buf (unchecked-byte (bit-and 0xff v)))
-  buf)
+(defn get-unsigned-int
+  [buf]
+  (unsigned-int (get-int buf)))
 
-(defn pack-short! [v buf]
-  (put-short buf (unchecked-short (bit-and 0xffff v)))
-  buf)
-
-(defn pack-int! [v buf]
-  (put-int buf (unchecked-int (bit-and 0xffffffff v)))
-  buf)
-
-(defn pack-string! [w s buf]
+(defn put-string [w buf s]
   (let [l (.length s)
         ba (.getBytes s)]
     (if (< l w)
@@ -204,33 +203,14 @@
       (put-byte buf (.getBytes s) 0 w))
     buf))
 
-(defn unpack-byte! [buf]
-  (get-byte buf))
-
-(defn unpack-short! [buf]
-  (get-short buf))
-
-(defn unpack-int! [buf]
-  (get-int buf))
-
-(defn unpack-unsigned-byte! [buf]
-  (unsigned-byte (unpack-byte! buf)))
-
-(defn unpack-unsigned-short! [buf]
-  (unsigned-short (unpack-short! buf)))
-
-(defn unpack-unsigned-int! [buf]
-  (unsigned-int (unpack-int! buf)))
-
 (defn make-string-from-bytes [ba]
   (let [nba (into-array Byte/TYPE (map unchecked-byte (filter pos? (seq ba))))]
     (String. nba 0 (alength nba))))
 
-(defn unpack-string! [w buf]
+(defn get-string [w buf]
   (let [bb (byte-array w)]
     (get-byte buf bb 0 w)
     (make-string-from-bytes bb)))
-
 
 (defn accum-size
   [total cnt esize e]
@@ -239,22 +219,22 @@
 (defn char->unpacker
   [e]
   (case e
-    \b unpack-byte!
-    \B unpack-unsigned-byte!
-    \h unpack-short!
-    \H unpack-unsigned-short!
-    \i unpack-int!
-    \I unpack-unsigned-int!
-    \s unpack-string!))
+    \b get-byte
+    \B get-unsigned-byte
+    \h get-short
+    \H get-unsigned-short
+    \i get-int
+    \I get-unsigned-int
+    \s get-string))
 
 (defn char->packer
   [e]
   (do
     (case e
-      (\b \B) pack-byte!
-      (\h \H) pack-short!
-      (\i \I) pack-int!
-      \s pack-string!)))
+      (\b \B) put-byte
+      (\h \H) put-short
+      (\i \I) put-int
+      \s put-string)))
 
 (defn char->size
   [e]
@@ -312,7 +292,7 @@
   ([s buf]
     (let [packers (struct-reduce (partial accum-marshal char->packer) [] s)]
       (fn [data]
-        (reduce (fn [b [f e]] (f e b)) buf (partition 2 (interleave packers data)))))))
+        (reduce (fn [b [f e]] (f b e)) buf (partition 2 (interleave packers data)))))))
 
 (defprotocol BinaryRecord
   (binsize [r])
@@ -363,46 +343,3 @@
 (defn byte-seq
   [buf]
   (lazy-seq (cons (get-byte buf) (byte-seq buf))))
-
-(def bb (->BinIOStream nil (output-stream "out.bin") :little))
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(pack-byte! 0x42 bb)
-(defbinrecord TestMsg "hhhis16" [magic sz tp cnt msg])
-(def tm (->TestMsg 0x1eaf 26 0x10 0x42 "booo"))
-(reduce (fn [b t] (pack t b)) bb (map #(assoc tm :cnt %1) (range 0 10)))
-(pack tm bb)
-(.close (:out bb))
-
-
-(defn -main
-  "I don't do a whole lot."
-  [& args]
-  (println "hey!"))
-
-
-;(defbinrecord TestPacket "hhibhs5" [magic length test-int test-byte test-short test-str])
-;(def s (read-records "out.dat" (TestPacket. 1 1 1 1 1 "")))
-
-;(defbinrecord Testr "bbbb" [a b c d])
-;(def t (->Testr 1 1 1 1))
-;(def b (pack t))
-;(println (unpack t (flip b)))
-
-;; (defn defbinrecord
-;;   [name spec & fields]
-;;   (let [sz (struct-size spec)
-;;         packer (struct-packer spec)
-;;         unpacker (struct-unpacker spec)]
-;;     (defrecord name fields
-;;       BinaryRecord
-;;       (size [_] sz)
-;;       (pack [r d] (packer r))
-;;       (unpack [r b] (unpacker b)

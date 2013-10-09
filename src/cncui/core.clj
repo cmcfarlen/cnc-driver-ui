@@ -4,6 +4,15 @@
             [seesaw.core :as ss])
   (:import [java.io PushbackReader]))
 
+(defprotocol Service
+  (start [svc])
+  (stop  [svc]))
+
+(defn notify
+  [& msgs]
+  (apply (partial println "NOTIFY:") msgs))
+
+
 (def default-config
   { :dev "/dev/tty.usbserial" })
 

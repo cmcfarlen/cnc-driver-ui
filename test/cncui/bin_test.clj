@@ -16,81 +16,81 @@
 (deftest packbytes
   (testing "packing byte"
     (let [d (range -127 127)]
-      (is (= d (map (fn [b] (->> *b*
+      (is (= d (map (fn [b] (-> *b*
                             (.rewind)
-                            (pack-byte! b)
+                            (put-byte b)
                             (.flip)
-                            (unpack-byte!))) d))))))
+                            (get-byte))) d))))))
 
 (deftest packubytes
   (testing "packing unsigned byte"
     (let [d (range 0 256)]
-      (is (= d (map (fn [b] (->> *b*
+      (is (= d (map (fn [b] (-> *b*
                             (.rewind)
-                            (pack-byte! b)
+                            (put-byte b)
                             (.flip)
-                            (unpack-unsigned-byte!))) d))))))
+                            (get-unsigned-byte))) d))))))
 
 (deftest packshorts
   (testing "packing shorts"
     (let [d (range Short/MIN_VALUE Short/MAX_VALUE)]
-      (is (= d (map (fn [v] (->> *b*
+      (is (= d (map (fn [v] (-> *b*
                             (.rewind)
-                            (pack-short! v)
+                            (put-short v)
                             (.flip)
-                            (unpack-short!))) d))))))
+                            (get-short))) d))))))
 
 (deftest packushorts
   (testing "packing unsigned shorts"
     (let [d [0 10 Short/MAX_VALUE 65535]]
-      (is (= d (map (fn [v] (->> *b*
+      (is (= d (map (fn [v] (-> *b*
                             (.rewind)
-                            (pack-short! v)
+                            (put-short v)
                             (.flip)
-                            (unpack-unsigned-short!))) d))))))
+                            (get-unsigned-short))) d))))))
 
 (deftest packints
   (testing "packing ints"
     (let [d [Integer/MIN_VALUE 0 Integer/MAX_VALUE]]
-      (is (= d (map (fn [v] (->> *b*
+      (is (= d (map (fn [v] (-> *b*
                             (.rewind)
-                            (pack-int! v)
+                            (put-int v)
                             (.flip)
-                            (unpack-int!))) d))))))
+                            (get-int))) d))))))
 
 (deftest packuints
   (testing "packing unsigned ints"
     (let [d [0 Integer/MAX_VALUE 4000000000 4294967295]]
-      (is (= d (map (fn [v] (->> *b*
+      (is (= d (map (fn [v] (-> *b*
                             (.rewind)
-                            (pack-int! v)
+                            (put-int v)
                             (.flip)
-                            (unpack-unsigned-int!))) d))))))
+                            (get-unsigned-int))) d))))))
 
 
 (deftest packstrings
   (testing "packing strings"
     (let [s ["a" "b" "hello" "world"]]
-      (is (= s (map (fn [v] (->> *b*
+      (is (= s (map (fn [v] (-> *b*
                             (.rewind)
-                            (pack-string! 32 v)
+                            ((partial put-string 32) v)
                             (.flip)
-                            (unpack-string! 32))) s))))))
+                            ((partial get-string 32)))) s))))))
 
 
 (defn make-binfile
   []
   (let [tmpf (File/createTempFile "test" "bin")
         bb   (byte-buffer 32)]
-    (->> bb
-        (pack-int! 1)
-        (pack-int! 2)
-        (pack-int! 3)
-        (pack-int! 4)
-        (pack-int! 5)
-        (pack-int! 6)
-        (pack-int! 7)
-        (pack-int! 8)
+    (-> bb
+        (put-int 1)
+        (put-int 2)
+        (put-int 3)
+        (put-int 4)
+        (put-int 5)
+        (put-int 6)
+        (put-int 7)
+        (put-int 8)
         (flip))
     (with-open [ostr (io/output-stream tmpf)]
       (doall (take 10 (repeatedly (fn [] (.write ostr (.array bb)))))))
@@ -108,7 +108,7 @@
     (let [bf (make-binfile)]
       (with-open [in (io/input-stream bf)]
         (let [bs (->BinIOStream in nil :big)
-              istr (take 8 (repeatedly (fn [] (unpack-int! bs))))
+              istr (take 8 (repeatedly (fn [] (get-int bs))))
               exp [1 2 3 4 5 6 7 8]]
           (is (= istr exp))))))
   (testing "binoutput biniostream"
