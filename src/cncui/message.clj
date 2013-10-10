@@ -13,16 +13,6 @@
   (stop [svc]
     (core/notify "stopping message service" svc)))
 
-(defn register-agent
-  []
-  (agent {:typemap {} :idmap {}}))
-
-(defn register-type
-  [a r-type r-id]
-  (-> a
-    (assoc-in [:typemap r-type] r-id)
-    (assoc-in [:idmap r-id] r-type)))
-
 (defn id->type
   [message-agent r-id]
   (-> @message-agent :idmap (get r-id)))
@@ -44,11 +34,14 @@
 
 (defn message-service
   [binstream]
-  (->MessageService (register-agent) binstream))
+  (->MessageService (ref { :typemap {} :idmap {} }) binstream))
 
 (defn register-message
   [svc msg-type type-id]
-  (send (:reg-agent svc) register-type msg-type type-id))
+  (let [reg (:reg-agent svc)]
+    (dosync (ref-set reg (-> @reg
+                             (assoc-in [:typemap msg-type] type-id)
+                             (assoc-in [:idmap type-id] msg-type))))))
 
 ; message look like 0x1eaf <short size> <short type> <correlation> <field...>
 (defn write-message
