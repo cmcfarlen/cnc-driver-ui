@@ -11,11 +11,6 @@
             [cncui.message :as msg]
             [cncui.mill :as mill]))
 
-(defn hey
-  []
-  (println "heyheyhey"))
-
-
 (defn make-data
   [cnt]
   (let [file "make-data.bin"
@@ -40,5 +35,44 @@
     (core/stop msvc)
     (.close (:in bs))))
 
+
+(defn make-system
+  [s cfg]
+  (let [port (port/open (:tty cfg))
+        binstr (bin/io-bin-stream (:in port) (:out port) :little)
+        msvc (msg/message-service binstr)
+        mill (mill/mill-service msvc)]
+    {:services {:mill (core/start mill) :message (core/start msvc)}
+     :resources {:port port}
+     :config cfg}))
+
+(def system nil)
+
+(defn start
+  []
+  (alter-var-root #'system make-system {:tty "/dev/tty.usbmodem1d161"}))
+
+(defn stop
+  []
+  (let [sys system
+        resources (:resources sys)
+        services (:services sys)]
+    (map #(core/stop (val %1)) services)
+    (port/close (:port resources))))
+
+(defn ping
+  []
+  (let [t (mill/->TestMessage 0 "ping")]
+    (-> system
+        :services
+        :message
+        (msg/write-message t))))
+
+
+(defn reset
+  []
+  (do
+    (stop)
+    (refresh :after 'user/start)))
 
 

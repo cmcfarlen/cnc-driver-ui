@@ -1,5 +1,6 @@
 (ns cncui.mill
     (:require [cncui.message :as msg]
+              [cncui.core :as core]
               [cncui.bin :as bin]))
 
 
@@ -23,4 +24,20 @@
   (move-y! [m [ydir yvel yacc ydist]])
   (move-z! [m [zdir zvel zacc zdist]]))
 
+
+(defrecord MillService [msg-svc]
+  core/Service
+  (start [svc]
+    (core/notify "Starting mill service")
+    (msg/register-message msg-svc PingMessage 0)
+    (msg/register-message msg-svc ErrorMessage 1)
+    (msg/register-message msg-svc InfoMessage 2)
+    (msg/register-message msg-svc TestMessage 16)
+    svc)
+  (stop [svc]
+    (core/notify "Stopping mill service")
+    svc))
+
+(defn mill-service [msg-svc]
+  (->MillService msg-svc))
 

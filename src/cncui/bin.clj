@@ -26,7 +26,6 @@
    io devices extending this protocol should be able to pack straight from the device"
   (remaining? [s])
   (end? [s])
-  (flip [s])
   (put-byte [s v] [s v ofs cnt] "could be a byte or byte[]")
   (put-short [s v])
   (put-int [s v])
@@ -40,7 +39,6 @@
 (extend-protocol BinStream
   ByteBuffer
   (remaining? [buf] (.hasRemaining buf))
-  (flip [buf] (.flip buf))
   (put-byte ([buf v] (.put buf (unchecked-byte v)))
             ([buf v ofs cnt] (.put buf v ofs cnt)))
   (put-short [buf v] (.putShort buf (unchecked-short v)))
@@ -56,7 +54,6 @@
 (defrecord BinIOStream [in out order]
   BinStream
   (remaining? [buf] (> 0 (.available in)))
-  (flip [buf] buf)
   (put-byte [buf v] (.write out (unchecked-int v)) buf)
   (put-byte [buf v ofs cnt] (.write out v ofs cnt) buf)
   (put-short [buf v] 
@@ -180,6 +177,10 @@
   ([out order]
    (let [outs (io/output-stream out)]
      (->BinIOStream nil outs order))))
+
+(defn io-bin-stream
+  [in out order]
+  (->BinIOStream in out order))
 
 (defn get-unsigned-byte
   [buf]

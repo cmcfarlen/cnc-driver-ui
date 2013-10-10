@@ -91,7 +91,7 @@
         (put-int 6)
         (put-int 7)
         (put-int 8)
-        (flip))
+        (.flip))
     (with-open [ostr (io/output-stream tmpf)]
       (doall (take 10 (repeatedly (fn [] (.write ostr (.array bb)))))))
     tmpf))
@@ -143,7 +143,7 @@
       (is (= (:s tr) "1234567890"))
       (pack tr bb)
       (is (= (.position bb) (binsize tr)))
-      (flip bb)
+      (.flip bb)
       (let [unpacked-tr (unpack tr bb)]
         (is (= (:sb unpacked-tr) 100))
         (is (= (:ss unpacked-tr) 10000))

@@ -6,12 +6,37 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println '~x "=" x#) x#))
 
-(defrecord MessageService [reg-agent binstream]
+(declare read-message)
+
+(defn stop-reading
+  [a]
+  (assoc a :running false))
+
+(defn read-next-message
+  [a svc]
+  (let [msg (read-message svc)]
+    (when (:running a) (send *agent* read-next-message svc))
+    (print msg)
+    (assoc a :count (inc (:count a)))))
+
+(defn start-reading
+  [a svc]
+  (send *agent* read-next-message svc)
+  (assoc a :running true))
+
+
+(defrecord MessageService [reg-agent binstream read-agent]
   core/Service
   (start [svc]
-    (core/notify "starting message service" svc))
+    (do
+      (send read-agent start-reading svc)
+      (core/notify "starting emssage service")
+      svc))
   (stop [svc]
-    (core/notify "stopping message service" svc)))
+    (do
+      (send read-agent stop-reading)
+      (core/notify "stopping message service" svc)
+      svc)))
 
 (defn id->type
   [message-agent r-id]
@@ -34,7 +59,7 @@
 
 (defn message-service
   [binstream]
-  (->MessageService (ref { :typemap {} :idmap {} }) binstream))
+  (->MessageService (ref { :typemap {} :idmap {} }) binstream (agent {:count 0 :running false})))
 
 (defn register-message
   [svc msg-type type-id]
