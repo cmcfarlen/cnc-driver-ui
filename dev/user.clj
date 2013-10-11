@@ -19,7 +19,7 @@
         t  (mill/->TestMessage 0 "helloworld")]
     (core/start msvc)
     (msg/register-message msvc cncui.mill.TestMessage 16)
-    (reduce (fn [_ m] (msg/write-message msvc m)) nil (map #(assoc t :count %1) (range cnt)))
+    (reduce (fn [_ m] (msg/write-message msvc m)) nil (map #(assoc t :counter %1) (range cnt)))
     (core/stop msvc)
     (.close (:out bs))))
 
@@ -40,11 +40,11 @@
   [s cfg]
   (let [port (port/open (:tty cfg))
         binstr (bin/io-bin-stream (:in port) (:out port) :little)
-        msvc (msg/message-service binstr)
-        mill (mill/mill-service msvc)]
-    {:services {:mill (core/start mill) :message (core/start msvc)}
-     :resources {:port port}
-     :config cfg}))
+        msvc (core/start (msg/message-service binstr))
+        mill (core/start (mill/mill-service msvc))]
+      {:services {:message msvc :mill mill}
+       :resources {:port port}
+       :config cfg}))
 
 (def system nil)
 
@@ -60,19 +60,37 @@
     (map #(core/stop (val %1)) services)
     (port/close (:port resources))))
 
+(defn send-message
+  [msg]
+  (-> system
+      :services
+      :message
+      (msg/write-message msg)))
+
 (defn ping
   []
-  (let [t (mill/->TestMessage 0 "ping")]
-    (-> system
-        :services
-        :message
-        (msg/write-message t))))
+  (send-message (mill/->TestMessage 0 "ping")))
 
+(defn setup
+  []
+  (send-message (mill/->SetupMessage 0)))
 
-(defn reset
+(defn start-motor
+  [v]
+  (send-message (mill/->StartMessage (unchecked-int (* 1000 v)))))
+
+(defn stop-motor
+  []
+  (send-message (mill/->StopMessage 0)))
+
+(defn exercise-motor
+  [maxf steps]
+  (reduce (fn [_ v] (start-motor v)) nil (range 0 maxf (/ maxf steps)))
+  (reduce (fn [_ v] (start-motor v)) nil (range maxf 0 (/ (- maxf) steps))))
+
+(defn reset-motor
   []
   (do
     (stop)
     (refresh :after 'user/start)))
-
 

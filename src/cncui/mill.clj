@@ -9,12 +9,18 @@
 (bin/defbinrecord ErrorMessage "s" [status])
 (bin/defbinrecord InfoMessage "s" [status])
 (bin/defbinrecord TestMessage "is16" [counter message])
+(bin/defbinrecord StartMessage "i" [velocity])
+(bin/defbinrecord StopMessage "i" [r])
+(bin/defbinrecord SetupMessage "i" [r])
 
 (def mill-messages
   [cncui.mill.PingMessage 0
    cncui.mill.ErrorMessage 1
    cncui.mill.InfoMessage 2
-   cncui.mill.TestMessage 16])
+   cncui.mill.TestMessage 16
+   cncui.mill.StartMessage 17
+   cncui.mill.StopMessage 18
+   cncui.mill.SetupMessage 19])
 
 ; high level protocol
 (defprotocol Mill
@@ -29,10 +35,7 @@
   core/Service
   (start [svc]
     (core/notify "Starting mill service")
-    (msg/register-message msg-svc PingMessage 0)
-    (msg/register-message msg-svc ErrorMessage 1)
-    (msg/register-message msg-svc InfoMessage 2)
-    (msg/register-message msg-svc TestMessage 16)
+    (reduce (fn [_ [tp id]] (msg/register-message msg-svc tp id)) nil (partition 2 mill-messages))
     svc)
   (stop [svc]
     (core/notify "Stopping mill service")

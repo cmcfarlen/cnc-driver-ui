@@ -29,12 +29,14 @@
   core/Service
   (start [svc]
     (do
-      (send read-agent start-reading svc)
+      (when (:in binstream)
+        (send read-agent start-reading svc))
       (core/notify "starting emssage service")
       svc))
   (stop [svc]
     (do
-      (send read-agent stop-reading)
+      (when (:in binstream)
+        (send read-agent stop-reading))
       (core/notify "stopping message service" svc)
       svc)))
 
