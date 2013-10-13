@@ -62,10 +62,10 @@
 
 (defn send-message
   [msg]
-  (-> system
-      :services
-      :message
-      (msg/write-message msg)))
+   (-> system
+       :services
+       :message
+       (msg/send-command msg)))
 
 (defn ping
   []
