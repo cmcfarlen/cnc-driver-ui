@@ -50,7 +50,7 @@
 
 (defn start
   []
-  (alter-var-root #'system make-system {:tty "/dev/tty.usbmodem1d161"}))
+  (alter-var-root #'system make-system {:tty "/dev/tty.usbserial-AD025JD8"}))
 
 (defn stop
   []
