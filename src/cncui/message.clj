@@ -6,6 +6,11 @@
 
 (defmacro dbg[x] `(let [x# ~x] (println '~x "=" x#) x#))
 
+(defprotocol MessageEndpoint
+  (read-message [this msg])
+  (write-message [this msg])
+  (register-message [this msgtype msgid]))
+
 (declare read-message)
 (declare write-message)
 
